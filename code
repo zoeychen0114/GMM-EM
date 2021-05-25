@@ -1,0 +1,99 @@
+#data is loaded
+m, n = data.shape
+C = np.matmul(data.T, data)/m
+
+
+d = 5  # reduced dimension
+# number of components
+K = 2
+# random seed
+seed = 10
+
+# initialize pi
+pi = np.random.random(K)
+pi = pi/np.sum(pi)
+
+# initial zero mean and covariance
+mu = np.zeros((K,n))
+mu_old = mu.copy()
+
+sigma = []
+
+for ii in range(K):
+    dummy = np.random.randn(n, n)
+    sigma.append(dummy@dummy.T + np. identity(n, dtype = None))
+   
+# initialize the posterior
+tau = np.full((m, K), fill_value=0.)
+
+#set maximized iterations and convergence value
+maxIter= 100
+tol = 1e-5
+
+def density_func(k, sigma, d, mean):
+    Eval, Evec = np.linalg.eigh(sigma)
+    idx = Eval.argsort()[::-1]   
+    S = Eval[idx][:d]
+    V= Evec[:, idx][:,:d]
+    S_diag = np.diag(np.power(S, -0.5))
+    X_mu = (data - np.tile(mean[kk], (m,1))).T
+    density = np.exp((np.linalg.norm((S_diag @ V.T @ X_mu), axis=0)**2)*(-1/2))/np.sqrt(np.prod(S))   
+    return density
+
+   
+#GM EMM algorithm and likelihood computing
+dst = []
+log_likelihoods = []
+for ii in range(100):
+    
+    likelis = 0
+    # E-step    
+    for kk in range(K):
+        tau[:,kk] = pi[kk]*(density_func(kk, sigma[kk], d, mu[kk,:]))
+        
+        likelis += tau[:,kk]
+
+    #compute likelihood
+    logliks_temp = 0
+    for jj in range(m):
+        logliks_temp += np.log(likelis[jj])
+    logliks = logliks_temp
+    log_likelihoods.append(logliks)
+
+   # normalize tau
+    sum_tau = np.sum(tau, axis=1)
+    sum_tau.shape = (m,1)    
+    tau = np.divide(tau, np.tile(sum_tau, (1, K)))
+    tau[np.isnan(tau)] = 0
+
+    # M-step
+    for kk in range(K):
+        # update prior
+        pi[kk] = np.sum(tau[:, kk])/m
+        
+        # update component mean
+        mu[kk] = data.T @ tau[:,kk] / np.sum(tau[:,kk], axis = 0)
+       
+        # update cov matrix
+        dummy = data - np.tile(mu[kk], (m,1)) # X-mu
+        tau_sum = np.sum(tau[:,kk], axis = 0)
+        sigma[kk] = dummy.T @ np.diag(tau[:,kk]) @ dummy / tau_sum
+    
+
+    print('-----iteration---',ii)    
+    if np.linalg.norm(mu-mu_old) < tol:
+        print('training coverged')
+        break
+    mu_old = mu.copy()
+    if ii==99:
+        print('max iteration reached')
+        break
+
+def display_logliks(logliks):
+    fig = plt.figure(figsize=(5,5))
+    ax1 = fig.add_subplot(111) 
+    ax1.set_title('Log-Likelihood')
+    ax1.plot(logliks)
+    plt.show()
+   
+display_logliks(log_likelihoods) 
